@@ -1,15 +1,9 @@
 use std::collections::HashMap;
 
-use crate::db::api::Embeddings;
-use qdrant_client::qdrant::vectors::VectorsOptions;
-use qdrant_client::qdrant::{
-    CollectionOperationResponse, CreateCollectionBuilder, Distance, PointsOperationResponse,
-    ScoredPoint, SearchPointsBuilder, Vector, VectorParamsBuilder,
-};
-use qdrant_client::qdrant::{PointStruct, UpsertPointsBuilder};
-use qdrant_client::{Payload, Qdrant, QdrantError};
-use uuid::Uuid;
-
+use crate::vevtor::db::api::Embeddings;
+use qdrant_client::qdrant::{DeletePointsBuilder, PointStruct, PointsIdsList, UpsertPointsBuilder};
+use qdrant_client::qdrant::{PointsOperationResponse, SearchPointsBuilder};
+use qdrant_client::{Qdrant, QdrantError};
 type EmbeddingResult = (HashMap<String, qdrant_client::qdrant::Value>, f32);
 
 pub struct WithCollectionBuilder<'a> {
@@ -25,21 +19,24 @@ impl<'a> WithCollectionBuilder<'a> {
         }
     }
 
-    pub async fn insert_many(
-        &self,
-        data: Vec<(Embeddings, HashMap<&str, qdrant_client::qdrant::Value>, u64)>,
-    ) {
+    pub async fn insert_many<T>(&self, data: Vec<(Embeddings, T, u64)>)
+    where
+        T: std::convert::Into<qdrant_client::Payload>,
+    {
         for (embedding, payload, id) in data.into_iter() {
             _ = self.insert(embedding, payload, id).await;
         }
     }
 
-    pub async fn insert(
+    pub async fn insert<T>(
         &self,
         embeddings: Embeddings,
-        payload: HashMap<&str, qdrant_client::qdrant::Value>,
+        payload: T,
         id: u64,
-    ) -> Result<PointsOperationResponse, QdrantError> {
+    ) -> Result<PointsOperationResponse, QdrantError>
+    where
+        T: std::convert::Into<qdrant_client::Payload>,
+    {
         let points = vec![PointStruct::new(
             id,         // Uniqe point ID
             embeddings, // Vector to upsert
@@ -49,6 +46,16 @@ impl<'a> WithCollectionBuilder<'a> {
         self.client
             .upsert_points(UpsertPointsBuilder::new(&self.collection, points))
             .await
+    }
+
+    pub async fn remove(&self, id:u64)->Result<PointsOperationResponse, QdrantError>{
+        self.remove_many(vec![id]).await
+    }
+
+    pub async fn remove_many(&self, ids:Vec<u64>)->Result<PointsOperationResponse, QdrantError>{
+        self.client.delete_points(DeletePointsBuilder::new(&self.collection).points(PointsIdsList{
+            ids: ids.into_iter().map(|x|x.into()).collect()
+        })).await
     }
 
     pub async fn search(
