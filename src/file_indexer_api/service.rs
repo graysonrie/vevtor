@@ -1,34 +1,34 @@
 use std::sync::Arc;
 
-use tokio::sync::RwLock;
+use tokio::sync::mpsc::{Receiver, Sender};
 
 use super::{
-    infrastructure::db_manager::{self, FileVectorDbManager},
+    infrastructure::{db_manager::FileVectorDbManager, index_worker},
     models::{file_model::FileModel, search_query_models::VectorQueryModel},
-    util::vec::extract_vec_from_lock,
 };
 
 pub struct FileVectorDbService {
     db_manager: Arc<FileVectorDbManager>,
-    queue: Arc<RwLock<Vec<FileModel>>>,
-    batch_size: usize,
+    sender: Sender<FileModel>,
 }
 
-/// Manages the worker instance
 impl FileVectorDbService {
     pub fn new(qdrant_url: &str, batch_size: usize) -> Self {
         let db_manager = Arc::new(FileVectorDbManager::new(qdrant_url));
-        Self {
-            db_manager,
-            queue: Arc::new(RwLock::new(Vec::new())),
-            batch_size,
-        }
+
+        let db_manager_clone = Arc::clone(&db_manager);
+        let (sender, receiver) = tokio::sync::mpsc::channel::<FileModel>(30);
+        FileVectorDbService::spawn_index_worker(db_manager_clone, receiver, batch_size);
+
+        Self { db_manager, sender }
     }
 
-    pub async fn add_files(&self, files: &mut Vec<FileModel>) {
-        let mut queue = self.queue.write().await;
-        queue.append(files);
-        self.check_to_dispatch_queue().await;
+    pub async fn add_files(&self, files: Vec<FileModel>) {
+        for file in files.into_iter() {
+            if let Err(err) = self.sender.send(file).await {
+                println!("error sending file: {}", err);
+            }
+        }
     }
 
     pub async fn search(
@@ -45,18 +45,13 @@ impl FileVectorDbService {
         self.db_manager.reset_all().await;
     }
 
-    async fn check_to_dispatch_queue(&self) {
-        let len = self.queue.read().await.len();
-        if len > self.batch_size {
-            self.dispatch_queue().await;
-        }
-    }
-
-    async fn dispatch_queue(&self) {
-        let files = extract_vec_from_lock(Arc::clone(&self.queue)).await;
-        let db_manager = Arc::clone(&self.db_manager);
+    fn spawn_index_worker(
+        db_manager: Arc<FileVectorDbManager>,
+        receiver: Receiver<FileModel>,
+        batch_size: usize,
+    ) {
         tokio::spawn(async move {
-            db_manager.insert_many(files);
+            index_worker::index_worker(db_manager, batch_size, receiver).await;
         });
     }
 }

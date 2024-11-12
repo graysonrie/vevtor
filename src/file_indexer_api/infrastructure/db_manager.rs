@@ -15,7 +15,7 @@ pub struct FileVectorDbManager {
 type CollectionName = String;
 type ID = u64;
 impl FileVectorDbManager {
-    pub fn new(url:&str) -> Self {
+    pub fn new(url: &str) -> Self {
         let qdrant = QdrantApi::new(url);
         let generator = EmbeddingsGenerator::new();
         Self {
@@ -113,21 +113,6 @@ impl FileVectorDbManager {
             .collect())
     }
 
-    async fn ensure_collection_exists(
-        &self,
-        name: &str,
-        num_features: u64,
-    ) -> Result<(), QdrantError> {
-        let name_str = name.to_string();
-        if !self.known_collections.read().await.contains(&name_str) {
-            self.refresh_known_collections().await;
-            if !self.known_collections.read().await.contains(&name_str) {
-                self.qdrant.create_collection(name, num_features).await?;
-            }
-        }
-        Ok(())
-    }
-
     fn generate_embeddings(&self, files: &[FileModel]) -> Result<Vec<Vec<f32>>, String> {
         self.generator
             .embed_many(files.iter().map(|x| x.name.as_str()).collect())
@@ -159,6 +144,24 @@ impl FileVectorDbManager {
                 .push(id);
         }
         grouped_ids
+    }
+
+    async fn ensure_collection_exists(
+        &self,
+        name: &str,
+        num_features: u64,
+    ) -> Result<(), QdrantError> {
+        let name_str = name.to_string();
+        let mut contains = false;
+        {
+            contains = self.known_collections.read().await.contains(&name_str);
+        }
+        if !contains {
+            self.refresh_known_collections().await;
+            self.qdrant.create_collection(name, num_features).await?;
+            println!("Created collection: {}", name);
+        }
+        Ok(())
     }
 
     async fn refresh_known_collections(&self) {

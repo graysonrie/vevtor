@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::file_indexer_api::util::hashing;
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct FileModel{
     pub name:String,
     pub collection:String,
