@@ -1,14 +1,16 @@
 use super::db_manager::FileVectorDbManager;
-use crate::file_indexer_api::models::file_model::FileModel;
+use crate::indexer_api::traits::indexable::Indexable;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 
-pub async fn index_worker(
+pub async fn index_worker<T>(
     db_manager: Arc<FileVectorDbManager>,
     batch_size: usize,
-    mut receiver: mpsc::Receiver<FileModel>,
-) {
-    let mut queue: Vec<FileModel> = Vec::new();
+    mut receiver: mpsc::Receiver<T>,
+) where
+    T: Indexable,
+{
+    let mut queue: Vec<T> = Vec::new();
     println!("open");
     while let Some(file) = receiver.recv().await {
         queue.push(file);
@@ -23,9 +25,12 @@ pub async fn index_worker(
     }
 }
 
-async fn dispatch_queue(db_manager: Arc<FileVectorDbManager>, queue: &mut Vec<FileModel>) {
+async fn dispatch_queue<T>(db_manager: Arc<FileVectorDbManager>, queue: &mut Vec<T>)
+where
+    T: Indexable,
+{
     println!("dispatching queue");
-    let mut dispatch: Vec<FileModel> = Vec::new();
+    let mut dispatch: Vec<T> = Vec::new();
     dispatch.append(queue);
     if let Err(err) = db_manager.insert_many(dispatch).await {
         println!("Error inserting files: {}", err);

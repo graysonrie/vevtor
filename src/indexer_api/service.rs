@@ -4,26 +4,33 @@ use tokio::sync::mpsc::{Receiver, Sender};
 
 use super::{
     infrastructure::{db_manager::FileVectorDbManager, index_worker},
-    models::{file_model::FileModel, search_query_models::VectorQueryModel},
+    models::search_query_models::VectorQueryModel,
+    traits::indexable::Indexable,
 };
 
-pub struct FileVectorDbService {
+pub struct VevtorService<T>
+where
+    T: Indexable,
+{
     db_manager: Arc<FileVectorDbManager>,
-    sender: Sender<FileModel>,
+    sender: Sender<T>,
 }
 
-impl FileVectorDbService {
+impl<T> VevtorService<T>
+where
+    T: Indexable,
+{
     pub fn new(qdrant_url: &str, batch_size: usize) -> Self {
         let db_manager = Arc::new(FileVectorDbManager::new(qdrant_url));
 
         let db_manager_clone = Arc::clone(&db_manager);
-        let (sender, receiver) = tokio::sync::mpsc::channel::<FileModel>(30);
-        FileVectorDbService::spawn_index_worker(db_manager_clone, receiver, batch_size);
+        let (sender, receiver) = tokio::sync::mpsc::channel::<T>(30);
+        Self::spawn_index_worker(db_manager_clone, receiver, batch_size);
 
         Self { db_manager, sender }
     }
 
-    pub async fn add_files(&self, files: Vec<FileModel>) {
+    pub async fn add_files(&self, files: Vec<T>) {
         for file in files.into_iter() {
             if let Err(err) = self.sender.send(file).await {
                 println!("error sending file: {}", err);
@@ -35,9 +42,9 @@ impl FileVectorDbService {
         &self,
         params: &VectorQueryModel,
         top_k: u64,
-    ) -> Result<Vec<(FileModel, f32)>, String> {
+    ) -> Result<Vec<(T::Output, f32)>, String> {
         self.db_manager
-            .search(&params.query, &params.collection, top_k)
+            .search::<T>(&params.query, &params.collection, top_k)
             .await
     }
 
@@ -47,7 +54,7 @@ impl FileVectorDbService {
 
     fn spawn_index_worker(
         db_manager: Arc<FileVectorDbManager>,
-        receiver: Receiver<FileModel>,
+        receiver: Receiver<T>,
         batch_size: usize,
     ) {
         tokio::spawn(async move {

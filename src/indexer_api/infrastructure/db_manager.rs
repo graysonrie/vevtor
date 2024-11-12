@@ -3,9 +3,11 @@ use std::{collections::HashMap, iter::zip};
 use qdrant_client::QdrantError;
 use tokio::sync::RwLock;
 
-use crate::vevtor::{db::api::QdrantApi, embeddings::generator::EmbeddingsGenerator};
+use crate::{
+    indexer_api::traits::indexable::Indexable,
+    vector_db::{db::api::QdrantApi, embeddings::generator::EmbeddingsGenerator},
+};
 
-use super::super::models::file_model::FileModel;
 pub struct FileVectorDbManager {
     qdrant: QdrantApi,
     generator: EmbeddingsGenerator,
@@ -14,6 +16,7 @@ pub struct FileVectorDbManager {
 
 type CollectionName = String;
 type ID = u64;
+
 impl FileVectorDbManager {
     pub fn new(url: &str) -> Self {
         let qdrant = QdrantApi::new(url);
@@ -32,10 +35,14 @@ impl FileVectorDbManager {
             .await;
     }
 
-    pub async fn insert_many(&self, files: Vec<FileModel>) -> Result<(), String> {
+    pub async fn insert_many<T>(&self, files: Vec<T>) -> Result<(), String>
+    where
+        T: Indexable,
+    {
         let embeddings = self.generate_embeddings(&files)?;
 
-        let batches = self.group_files(zip(files, embeddings).collect());
+        let batches: HashMap<String, Vec<(T, Vec<f32>)>> =
+            self.group_files(zip(files, embeddings).collect());
 
         // Optional check?:
         for (collection_name, _) in batches.iter() {
@@ -82,12 +89,15 @@ impl FileVectorDbManager {
         }
     }
 
-    pub async fn search(
+    pub async fn search<T>(
         &self,
         query: &str,
         collection: &str,
         top_k: u64,
-    ) -> Result<Vec<(FileModel, f32)>, String> {
+    ) -> Result<Vec<(T::Output, f32)>, String>
+    where
+        T: Indexable,
+    {
         let test = self.generator.embed(query).unwrap();
 
         let search: Vec<(
@@ -104,8 +114,7 @@ impl FileVectorDbManager {
             .into_iter()
             .filter_map(|(payload, score)| {
                 // Ignore files that couldn't be parsed from the payload
-                if let Ok(model) = FileModel::from_qdrant_payload(&payload, collection.to_string())
-                {
+                if let Ok(model) = T::from_qdrant_payload(&payload, collection.to_string()) {
                     return Some((model, score));
                 }
                 None
@@ -113,21 +122,24 @@ impl FileVectorDbManager {
             .collect())
     }
 
-    fn generate_embeddings(&self, files: &[FileModel]) -> Result<Vec<Vec<f32>>, String> {
+    fn generate_embeddings<T>(&self, files: &[T]) -> Result<Vec<Vec<f32>>, String>
+    where
+        T: Indexable,
+    {
         self.generator
-            .embed_many(files.iter().map(|x| x.name.as_str()).collect())
+            .embed_many(files.iter().map(|x| x.embed_label()).collect())
             .map_err(|err| format!("Error generating embeddings: {}", err))
     }
 
-    fn group_files(
-        &self,
-        zip: Vec<(FileModel, Vec<f32>)>,
-    ) -> HashMap<CollectionName, Vec<(FileModel, Vec<f32>)>> {
-        let mut grouped_files: HashMap<CollectionName, Vec<(FileModel, Vec<f32>)>> = HashMap::new();
+    fn group_files<T>(&self, zip: Vec<(T, Vec<f32>)>) -> HashMap<CollectionName, Vec<(T, Vec<f32>)>>
+    where
+        T: Indexable,
+    {
+        let mut grouped_files: HashMap<CollectionName, Vec<(T, Vec<f32>)>> = HashMap::new();
 
         for (file, embedding) in zip {
             grouped_files
-                .entry(file.collection.clone()) // Use the collection field as the key
+                .entry(file.collection()) // Use the collection field as the key
                 .or_insert_with(Vec::new)
                 .push((file, embedding));
         }
