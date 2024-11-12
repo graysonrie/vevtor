@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 
-use crate::vevtor::db::api::Embeddings;
 use qdrant_client::qdrant::{DeletePointsBuilder, PointStruct, PointsIdsList, UpsertPointsBuilder};
 use qdrant_client::qdrant::{PointsOperationResponse, SearchPointsBuilder};
 use qdrant_client::{Qdrant, QdrantError};
-type EmbeddingResult = (HashMap<String, qdrant_client::qdrant::Value>, f32);
 
+type EmbeddingResult = (HashMap<String, qdrant_client::qdrant::Value>, f32);
+pub type Embeddings = Vec<f32>;
 pub struct WithCollectionBuilder<'a> {
     client: &'a Qdrant,
     collection: String,

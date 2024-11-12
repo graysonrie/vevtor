@@ -1,78 +1,62 @@
-use std::iter::zip;
+use std::sync::Arc;
 
-use crate::vevtor::{
-    db::api::QdrantApi,
-    embeddings::generator::{self, EmbeddingsGenerator},
+use tokio::sync::RwLock;
+
+use super::{
+    infrastructure::db_manager::{self, FileVectorDbManager},
+    models::{file_model::FileModel, search_query_models::VectorQueryModel},
+    util::vec::extract_vec_from_lock,
 };
 
-use super::{models::file_model::FileModel, util::hashing};
-
-const FILES_COLLECTION: &str = "files";
-pub struct VectorFileIndexService {
-    qdrant: QdrantApi,
-    generator: EmbeddingsGenerator,
+pub struct FileVectorDbService {
+    db_manager: Arc<FileVectorDbManager>,
+    queue: Arc<RwLock<Vec<FileModel>>>,
+    batch_size: usize,
 }
 
-impl VectorFileIndexService {
-    pub fn new() -> Self {
-        let qdrant = QdrantApi::new("http://localhost:6334");
-        let generator = EmbeddingsGenerator::new();
-        Self { qdrant, generator }
+/// Manages the worker instance
+impl FileVectorDbService {
+    pub fn new(qdrant_url: &str, batch_size: usize) -> Self {
+        let db_manager = Arc::new(FileVectorDbManager::new(qdrant_url));
+        Self {
+            db_manager,
+            queue: Arc::new(RwLock::new(Vec::new())),
+            batch_size,
+        }
     }
 
-    pub async fn reset_all(&self) {
-        self.qdrant
-            .delete_collection(FILES_COLLECTION)
+    pub async fn add_files(&self, files: &mut Vec<FileModel>) {
+        let mut queue = self.queue.write().await;
+        queue.append(files);
+        self.check_to_dispatch_queue().await;
+    }
+
+    pub async fn search(
+        &self,
+        params: &VectorQueryModel,
+        top_k: u64,
+    ) -> Result<Vec<(FileModel, f32)>, String> {
+        self.db_manager
+            .search(&params.query, &params.collection, top_k)
             .await
-            .unwrap();
     }
 
-    pub async fn insert_many(&self, files: &[FileModel]) -> Result<(), String> {
-        let embeddings = self
-            .generator
-            .embed_many(files.iter().map(|x| x.name.as_str()).collect())
-            .map_err(|err| format!("Error generating embeeddings: {}", err))?;
-
-        let zip: Vec<(&FileModel, Vec<f32>)> = zip(files, embeddings).collect();
-
-        self.qdrant
-            .with_collection(FILES_COLLECTION)
-            .insert_many(
-                zip.into_iter()
-                    .map(|(file, embeddings)| {
-                        let payload = file.as_map();
-                        let id = hashing::string_to_u64(&file.name); // name of the document is the ID
-
-                        (embeddings, payload, id)
-                    })
-                    .collect(),
-            )
-            .await;
-
-        Ok(())
+    pub async fn delete_all_collections(&self) {
+        self.db_manager.reset_all().await;
     }
 
-    pub async fn search(&self, query: &str, top_k: u64) -> Result<Vec<(FileModel, f32)>, String> {
-        let test = self.generator.embed(query).unwrap();
+    async fn check_to_dispatch_queue(&self) {
+        let len = self.queue.read().await.len();
+        if len > self.batch_size {
+            self.dispatch_queue().await;
+        }
+    }
 
-        let search: Vec<(
-            std::collections::HashMap<String, qdrant_client::qdrant::Value>,
-            f32,
-        )> = self
-            .qdrant
-            .with_collection("test")
-            .search(test, top_k)
-            .await
-            .map_err(|err| format!("Search error: {}", err))?;
-
-        Ok(search
-            .into_iter()
-            .map(|(payload, score)| {
-                if let Ok(model) = FileModel::from_qdrant_payload(&payload){
-                    return Some((model, score));
-                }
-                None
-            }).filter_map(|x| x)
-            .collect())
+    async fn dispatch_queue(&self) {
+        let files = extract_vec_from_lock(Arc::clone(&self.queue)).await;
+        let db_manager = Arc::clone(&self.db_manager);
+        tokio::spawn(async move {
+            db_manager.insert_many(files);
+        });
     }
 }

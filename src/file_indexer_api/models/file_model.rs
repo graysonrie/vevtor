@@ -3,9 +3,12 @@ use std::collections::HashMap;
 use qdrant_client::qdrant::Value;
 use serde::{Deserialize, Serialize};
 
+use crate::file_indexer_api::util::hashing;
+
 #[derive(Serialize, Deserialize, Clone)]
 pub struct FileModel{
-    pub name:String
+    pub name:String,
+    pub collection:String,
 }
 
 impl FileModel{
@@ -15,10 +18,14 @@ impl FileModel{
         map
     }
 
-    pub fn from_qdrant_payload(payload: &std::collections::HashMap<String, qdrant_client::qdrant::Value>) -> Result<FileModel, String> {
+    pub fn from_qdrant_payload(payload: &std::collections::HashMap<String, qdrant_client::qdrant::Value>, collection:String) -> Result<FileModel, String> {
         payload.get("name")
             .and_then(|name_key| name_key.as_str().map(|name| name.to_string()))
-            .map(|name| FileModel { name })
+            .map(|name| FileModel { name, collection })
             .ok_or_else(|| "Name field doesn't exist".to_string())
+    }
+
+    pub fn get_id(&self)->u64{
+        hashing::string_to_u64(&self.name)
     }
 }

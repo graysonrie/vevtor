@@ -6,7 +6,6 @@ use qdrant_client::{Qdrant, QdrantError};
 
 use super::builders::with_collection::WithCollectionBuilder;
 
-pub type Embeddings = Vec<f32>;
 pub struct QdrantApi {
     client: Qdrant,
 }
@@ -35,14 +34,32 @@ impl QdrantApi {
             .map(|_| self.with_collection(name))
     }
 
+    pub async fn delete_collections(&self, names:&Vec<&str>){
+        for collection in names.iter(){
+            self.delete_collection(&collection).await;
+        }
+    }
+
     pub async fn delete_collection(
         &self,
         name: &str,
     ) -> Result<CollectionOperationResponse, QdrantError> {
+        println!("Deleting collection '{}'",name);
         self.client.delete_collection(name).await
     }
 
     pub fn with_collection(&self, collection: &str) -> WithCollectionBuilder {
         WithCollectionBuilder::new(&self.client, collection)
+    }
+
+    pub async fn list_collections(&self) -> Vec<String> {
+        self
+            .client
+            .list_collections()
+            .await
+            .into_iter()
+            .flat_map(|collection| collection.collections.into_iter())
+            .map(|response| response.name)
+            .collect()
     }
 }
