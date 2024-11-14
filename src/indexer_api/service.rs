@@ -5,9 +5,11 @@ use tokio::sync::mpsc::{Receiver, Sender};
 use super::{
     infrastructure::{db_manager::FileVectorDbManager, index_worker},
     models::search_query_models::VectorQueryModel,
-    traits::indexable::{Indexable, IntoPayload},
+    traits::indexable::{Indexable, IntoPayload}, util::hashing::string_to_u64,
 };
 
+type Collection = String;
+type ID = u64;
 pub struct VevtorService<T>
 where
     T: Indexable + IntoPayload
@@ -50,6 +52,15 @@ where
 
     pub async fn delete_all_collections(&self) {
         self.db_manager.reset_all().await;
+    }
+
+    pub async fn delete_by_str_id(&self, ids: Vec<(Collection, &str)>) {
+        // uses the same hash function that the macro uses
+        self.db_manager.delete_many(ids.into_iter().map(|(x,y)| (x,string_to_u64(y))).collect()).await
+    }
+
+    pub async fn delete_by_id(&self, ids: Vec<(Collection, ID)>) {
+        self.db_manager.delete_many(ids).await
     }
 
     fn spawn_index_worker(

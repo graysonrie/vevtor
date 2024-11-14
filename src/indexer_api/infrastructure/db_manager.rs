@@ -4,7 +4,7 @@ use qdrant_client::{Payload, QdrantError};
 use tokio::sync::RwLock;
 
 use crate::{
-    indexer_api::traits::indexable::{Indexable, IntoJsonPayload, IntoPayload},
+    indexer_api::traits::indexable::{Indexable, IntoPayload},
     vector_db::{db::api::QdrantApi, embeddings::generator::EmbeddingsGenerator},
 };
 
@@ -96,9 +96,7 @@ impl FileVectorDbManager {
         top_k: u64,
     ) -> Result<Vec<(T, f32)>, String>
     where
-        T: Indexable
-            + IntoPayload
-            + From<std::collections::HashMap<String, qdrant_client::qdrant::Value>>,
+        T: Indexable + IntoPayload,
     {
         let test = self.generator.embed(query).unwrap();
 
@@ -116,7 +114,7 @@ impl FileVectorDbManager {
             .into_iter()
             .filter_map(|(payload, score)| {
                 // Ignore files that couldn't be parsed from the payload
-                if let Ok(model) = T::from(payload) {
+                if let Ok(model) = T::from_qdrant_payload(&payload) {
                     return Some((model, score));
                 }
                 None
