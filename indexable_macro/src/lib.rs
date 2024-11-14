@@ -1,7 +1,6 @@
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, DeriveInput, Ident, Meta, NestedMeta, Type};
-mod traits;
 
 #[proc_macro_derive(Indexable, attributes(indexable))]
 pub fn derive_indexable(input: TokenStream) -> TokenStream {
@@ -86,7 +85,8 @@ pub fn derive_indexable(input: TokenStream) -> TokenStream {
 
     let expanded = quote! {
         use std::collections::HashMap;
-        use ::qdrant_client::{qdrant::Value, Payload};
+        use ::vevtor::qdrant_client::{qdrant::Value, Payload};  // Fully qualify qdrant_client through main crate
+        use ::vevtor::twox_hash::XxHash64;                      // Fully qualify twox_hash
 
         impl Indexable for #struct_name {
             fn as_map(&self) -> HashMap<String, Value> {
@@ -150,7 +150,6 @@ pub fn derive_indexable(input: TokenStream) -> TokenStream {
             }
         }
         use std::hash::{Hash, Hasher};
-        use twox_hash::XxHash64;
         fn string_to_u64(s: &str) -> u64 {
             let mut hasher = XxHash64::default();
             s.hash(&mut hasher);

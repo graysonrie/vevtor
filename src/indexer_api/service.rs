@@ -5,14 +5,15 @@ use tokio::sync::mpsc::{Receiver, Sender};
 use super::{
     infrastructure::{db_manager::FileVectorDbManager, index_worker},
     models::search_query_models::VectorQueryModel,
-    traits::indexable::{Indexable, IntoPayload}, util::hashing::string_to_u64,
+    traits::indexable::{Indexable, IntoPayload},
+    util::hashing::string_to_u64,
 };
 
 type Collection = String;
 type ID = u64;
 pub struct VevtorService<T>
 where
-    T: Indexable + IntoPayload
+    T: Indexable + IntoPayload,
 {
     db_manager: Arc<FileVectorDbManager>,
     sender: Sender<T>,
@@ -50,13 +51,30 @@ where
             .await
     }
 
+    pub async fn list_collections(&self) -> Vec<String> {
+        self.db_manager.list_collections().await
+    }
+
     pub async fn delete_all_collections(&self) {
         self.db_manager.reset_all().await;
     }
 
-    pub async fn delete_by_str_id(&self, ids: Vec<(Collection, &str)>) {
+    pub async fn ensure_collection_exists(&self, name: &str) -> Result<(), String> {
+        self.db_manager
+            .ensure_collection_exists(name)
+            .await
+            .map_err(|err| format!("Error when ensuring that collection exists: {}", err))
+    }
+
+    pub async fn delete_by_str_id(&self, ids: Vec<(Collection, String)>) {
         // uses the same hash function that the macro uses
-        self.db_manager.delete_many(ids.into_iter().map(|(x,y)| (x,string_to_u64(y))).collect()).await
+        self.db_manager
+            .delete_many(
+                ids.into_iter()
+                    .map(|(x, y)| (x, string_to_u64(&y)))
+                    .collect(),
+            )
+            .await
     }
 
     pub async fn delete_by_id(&self, ids: Vec<(Collection, ID)>) {

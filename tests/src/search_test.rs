@@ -2,7 +2,9 @@
 mod test {
     use std::time::Duration;
 
-    use crate::{indexer_api::{models::search_query_models::VectorQueryModel, service::VevtorService}, tests::file_model::FileModel};
+    use vevtor::{VectorQueryModel, VevtorService};
+
+    use crate::file_model::FileModel;
 
     #[tokio::test]
     async fn test() {

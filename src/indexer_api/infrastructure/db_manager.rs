@@ -35,18 +35,18 @@ impl FileVectorDbManager {
             .await;
     }
 
-    pub async fn insert_many<T>(&self, files: Vec<T>) -> Result<(), String>
+    pub async fn insert_many<T>(&self, entries: Vec<T>) -> Result<(), String>
     where
         T: Indexable + IntoPayload,
     {
-        let embeddings = self.generate_embeddings(&files)?;
+        let embeddings = self.generate_embeddings(&entries)?;
 
         let batches: HashMap<String, Vec<(T, Vec<f32>)>> =
-            self.group_files(zip(files, embeddings).collect());
+            self.group_entries(zip(entries, embeddings).collect());
 
         // Optional check?:
         for (collection_name, _) in batches.iter() {
-            self.ensure_collection_exists(collection_name, self.generator.embedding_dim_len)
+            self.ensure_collection_exists(collection_name)
                 .await
                 .map_err(|err| format!("Error ensuring collection exists: {}", err))?;
         }
@@ -113,7 +113,7 @@ impl FileVectorDbManager {
         Ok(search
             .into_iter()
             .filter_map(|(payload, score)| {
-                // Ignore files that couldn't be parsed from the payload
+                // Ignore entries that couldn't be parsed from the payload
                 if let Ok(model) = T::from_qdrant_payload(&payload) {
                     return Some((model, score));
                 }
@@ -122,28 +122,31 @@ impl FileVectorDbManager {
             .collect())
     }
 
-    fn generate_embeddings<T>(&self, files: &[T]) -> Result<Vec<Vec<f32>>, String>
+    fn generate_embeddings<T>(&self, entries: &[T]) -> Result<Vec<Vec<f32>>, String>
     where
         T: Indexable,
     {
         self.generator
-            .embed_many(files.iter().map(|x| x.embed_label()).collect())
+            .embed_many(entries.iter().map(|x| x.embed_label()).collect())
             .map_err(|err| format!("Error generating embeddings: {}", err))
     }
 
-    fn group_files<T>(&self, zip: Vec<(T, Vec<f32>)>) -> HashMap<CollectionName, Vec<(T, Vec<f32>)>>
+    fn group_entries<T>(
+        &self,
+        zip: Vec<(T, Vec<f32>)>,
+    ) -> HashMap<CollectionName, Vec<(T, Vec<f32>)>>
     where
         T: Indexable,
     {
-        let mut grouped_files: HashMap<CollectionName, Vec<(T, Vec<f32>)>> = HashMap::new();
+        let mut grouped_entries: HashMap<CollectionName, Vec<(T, Vec<f32>)>> = HashMap::new();
 
         for (file, embedding) in zip {
-            grouped_files
+            grouped_entries
                 .entry(file.collection()) // Use the collection field as the key
                 .or_insert_with(Vec::new)
                 .push((file, embedding));
         }
-        grouped_files
+        grouped_entries
     }
 
     fn group_ids(&self, zip: Vec<(CollectionName, ID)>) -> HashMap<CollectionName, Vec<ID>> {
@@ -158,10 +161,9 @@ impl FileVectorDbManager {
         grouped_ids
     }
 
-    async fn ensure_collection_exists(
+    pub async fn ensure_collection_exists(
         &self,
-        name: &str,
-        num_features: u64,
+        name: &str
     ) -> Result<(), QdrantError> {
         let name_str = name.to_string();
         let mut contains = false;
@@ -170,10 +172,14 @@ impl FileVectorDbManager {
         }
         if !contains {
             self.refresh_known_collections().await;
-            self.qdrant.create_collection(name, num_features).await?;
+            self.qdrant.create_collection(name, self.generator.embedding_dim_len).await?;
             println!("Created collection: {}", name);
         }
         Ok(())
+    }
+
+    pub async fn list_collections(&self)->Vec<String>{
+        self.qdrant.list_collections().await
     }
 
     async fn refresh_known_collections(&self) {

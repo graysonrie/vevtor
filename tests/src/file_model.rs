@@ -1,6 +1,7 @@
-use crate::indexer_api::traits::indexable::Indexable;
-use indexable_macro::Indexable;
+
+
 use serde::{Deserialize, Serialize};
+use vevtor::Indexable;
 
 #[derive(Serialize, Deserialize, Clone, Debug, Indexable)]
 #[serde(rename_all = "PascalCase")]
