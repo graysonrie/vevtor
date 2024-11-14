@@ -5,12 +5,12 @@ use tokio::sync::mpsc::{Receiver, Sender};
 use super::{
     infrastructure::{db_manager::FileVectorDbManager, index_worker},
     models::search_query_models::VectorQueryModel,
-    traits::indexable::Indexable,
+    traits::indexable::{Indexable, IntoPayload},
 };
 
 pub struct VevtorService<T>
 where
-    T: Indexable,
+    T: Indexable + IntoPayload
 {
     db_manager: Arc<FileVectorDbManager>,
     sender: Sender<T>,
@@ -18,7 +18,7 @@ where
 
 impl<T> VevtorService<T>
 where
-    T: Indexable,
+    T: Indexable + IntoPayload,
 {
     pub fn new(qdrant_url: &str, batch_size: usize) -> Self {
         let db_manager = Arc::new(FileVectorDbManager::new(qdrant_url));
@@ -42,7 +42,7 @@ where
         &self,
         params: &VectorQueryModel,
         top_k: u64,
-    ) -> Result<Vec<(T::Output, f32)>, String> {
+    ) -> Result<Vec<(T, f32)>, String> {
         self.db_manager
             .search::<T>(&params.query, &params.collection, top_k)
             .await

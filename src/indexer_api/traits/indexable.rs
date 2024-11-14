@@ -2,15 +2,13 @@ use std::collections::HashMap;
 
 use qdrant_client::qdrant::Value;
 
-pub trait Indexable: Send + Sync + 'static {
-    type Output;
+pub trait IntoPayload: Into<qdrant_client::Payload> {}
 
+// Implement `IntoPayload` for any type `T` that implements both `Indexable` and `Into<Payload>`
+impl<T> IntoPayload for T where T: Indexable + Into<qdrant_client::Payload> {}
+
+pub trait Indexable: Send + Sync + 'static{
     fn as_map(&self) -> HashMap<String, Value>;
-
-    fn from_qdrant_payload(
-        payload: &std::collections::HashMap<String, Value>,
-        collection: String,
-    ) -> Result<Self::Output, String>;
 
     fn get_id(&self) -> u64;
 

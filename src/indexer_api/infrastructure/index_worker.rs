@@ -1,5 +1,5 @@
 use super::db_manager::FileVectorDbManager;
-use crate::indexer_api::traits::indexable::Indexable;
+use crate::indexer_api::traits::indexable::{Indexable, IntoPayload};
 use std::sync::Arc;
 use tokio::sync::mpsc;
 
@@ -8,7 +8,7 @@ pub async fn index_worker<T>(
     batch_size: usize,
     mut receiver: mpsc::Receiver<T>,
 ) where
-    T: Indexable,
+    T: Indexable + IntoPayload,
 {
     let mut queue: Vec<T> = Vec::new();
     println!("open");
@@ -27,7 +27,7 @@ pub async fn index_worker<T>(
 
 async fn dispatch_queue<T>(db_manager: Arc<FileVectorDbManager>, queue: &mut Vec<T>)
 where
-    T: Indexable,
+    T: Indexable + IntoPayload,
 {
     println!("dispatching queue");
     let mut dispatch: Vec<T> = Vec::new();

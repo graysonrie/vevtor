@@ -1,10 +1,10 @@
 use std::{collections::HashMap, iter::zip};
 
-use qdrant_client::QdrantError;
+use qdrant_client::{Payload, QdrantError};
 use tokio::sync::RwLock;
 
 use crate::{
-    indexer_api::traits::indexable::Indexable,
+    indexer_api::traits::indexable::{Indexable, IntoJsonPayload, IntoPayload},
     vector_db::{db::api::QdrantApi, embeddings::generator::EmbeddingsGenerator},
 };
 
@@ -37,7 +37,7 @@ impl FileVectorDbManager {
 
     pub async fn insert_many<T>(&self, files: Vec<T>) -> Result<(), String>
     where
-        T: Indexable,
+        T: Indexable + IntoPayload,
     {
         let embeddings = self.generate_embeddings(&files)?;
 
@@ -58,8 +58,8 @@ impl FileVectorDbManager {
                     file_group
                         .into_iter()
                         .map(|(file, embeddings)| {
-                            let payload = file.as_map();
                             let id = file.get_id();
+                            let payload: Payload = file.into();
 
                             (embeddings, payload, id)
                         })
@@ -94,9 +94,11 @@ impl FileVectorDbManager {
         query: &str,
         collection: &str,
         top_k: u64,
-    ) -> Result<Vec<(T::Output, f32)>, String>
+    ) -> Result<Vec<(T, f32)>, String>
     where
-        T: Indexable,
+        T: Indexable
+            + IntoPayload
+            + From<std::collections::HashMap<String, qdrant_client::qdrant::Value>>,
     {
         let test = self.generator.embed(query).unwrap();
 
@@ -114,7 +116,7 @@ impl FileVectorDbManager {
             .into_iter()
             .filter_map(|(payload, score)| {
                 // Ignore files that couldn't be parsed from the payload
-                if let Ok(model) = T::from_qdrant_payload(&payload, collection.to_string()) {
+                if let Ok(model) = T::from(payload) {
                     return Some((model, score));
                 }
                 None
