@@ -29,7 +29,7 @@ mod test {
 
         match service
             .search(
-                &&VectorQueryModel {
+                &VectorQueryModel {
                     collection: "files".to_string(),
                     query: "test".to_string(),
                 },
