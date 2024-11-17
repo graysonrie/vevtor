@@ -8,8 +8,7 @@ mod test {
 
     #[tokio::test]
     async fn test() {
-        let url = "http://127.0.0.1:6334";
-        let service = VevtorService::new(url, 8);
+        let service = VevtorService::new("http://127.0.0.1:6334");
 
         service.delete_all_collections().await;
 
@@ -24,11 +23,14 @@ mod test {
             files.push(model);
         }
 
-        service.add_files(files).await;
+        let indexer = service.spawn_index_worker::<FileModel>(32, 32);
+
+        indexer.index(files).await;
+
         tokio::time::sleep(Duration::from_secs(5)).await;
 
         match service
-            .search(
+            .search::<FileModel>(
                 &VectorQueryModel {
                     collection: "files".to_string(),
                     query: "test".to_string(),

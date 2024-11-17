@@ -1,51 +1,31 @@
-use std::sync::Arc;
-
-use tokio::sync::mpsc::{Receiver, Sender};
-
 use super::{
-    infrastructure::{db_manager::FileVectorDbManager, index_worker},
+    infrastructure::{db_manager::FileVectorDbManager, index_worker, indexer::Indexer},
     models::search_query_models::VectorQueryModel,
     traits::indexable::{Indexable, IntoPayload},
     util::hashing::string_to_u64,
 };
+use std::sync::Arc;
 
 type Collection = String;
 type ID = u64;
-pub struct VevtorService<T>
-where
-    T: Indexable + IntoPayload,
-{
+pub struct VevtorService {
     db_manager: Arc<FileVectorDbManager>,
-    sender: Sender<T>,
 }
 
-impl<T> VevtorService<T>
-where
-    T: Indexable + IntoPayload,
-{
-    pub fn new(qdrant_url: &str, batch_size: usize) -> Self {
+impl VevtorService {
+    pub fn new(qdrant_url: &str) -> Self {
         let db_manager = Arc::new(FileVectorDbManager::new(qdrant_url));
-
-        let db_manager_clone = Arc::clone(&db_manager);
-        let (sender, receiver) = tokio::sync::mpsc::channel::<T>(30);
-        Self::spawn_index_worker(db_manager_clone, receiver, batch_size);
-
-        Self { db_manager, sender }
+        Self { db_manager }
     }
 
-    pub async fn add_files(&self, files: Vec<T>) {
-        for file in files.into_iter() {
-            if let Err(err) = self.sender.send(file).await {
-                println!("error sending file: {}", err);
-            }
-        }
-    }
-
-    pub async fn search(
+    pub async fn search<T>(
         &self,
         params: &VectorQueryModel,
         top_k: u64,
-    ) -> Result<Vec<(T, f32)>, String> {
+    ) -> Result<Vec<(T, f32)>, String>
+    where
+        T: Indexable + IntoPayload,
+    {
         self.db_manager
             .search::<T>(&params.query, &params.collection, top_k)
             .await
@@ -81,13 +61,15 @@ where
         self.db_manager.delete_many(ids).await
     }
 
-    fn spawn_index_worker(
-        db_manager: Arc<FileVectorDbManager>,
-        receiver: Receiver<T>,
-        batch_size: usize,
-    ) {
+    pub fn spawn_index_worker<T>(&self, batch_size: usize, buffer_size: usize) -> Indexer<T>
+    where
+        T: Indexable + IntoPayload,
+    {
+        let db_manager_clone = Arc::clone(&self.db_manager);
+        let (sender, receiver) = tokio::sync::mpsc::channel::<T>(buffer_size);
         tokio::spawn(async move {
-            index_worker::index_worker(db_manager, batch_size, receiver).await;
+            index_worker::index_worker(db_manager_clone, batch_size, receiver).await;
         });
+        Indexer::new(sender)
     }
 }

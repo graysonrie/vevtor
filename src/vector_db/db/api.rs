@@ -34,9 +34,11 @@ impl QdrantApi {
             .map(|_| self.with_collection(name))
     }
 
-    pub async fn delete_collections(&self, names:&Vec<&str>){
-        for collection in names.iter(){
-            self.delete_collection(&collection).await;
+    pub async fn delete_collections(&self, names: &Vec<&str>) {
+        for collection in names.iter() {
+            if let Err(err) = self.delete_collection(collection).await {
+                println!("Error deleting collection: {}", err);
+            }
         }
     }
 
@@ -44,7 +46,7 @@ impl QdrantApi {
         &self,
         name: &str,
     ) -> Result<CollectionOperationResponse, QdrantError> {
-        println!("Deleting collection '{}'",name);
+        println!("Deleting collection '{}'", name);
         self.client.delete_collection(name).await
     }
 
@@ -53,8 +55,7 @@ impl QdrantApi {
     }
 
     pub async fn list_collections(&self) -> Vec<String> {
-        self
-            .client
+        self.client
             .list_collections()
             .await
             .into_iter()

@@ -143,7 +143,7 @@ impl FileVectorDbManager {
         for (file, embedding) in zip {
             grouped_entries
                 .entry(file.collection()) // Use the collection field as the key
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push((file, embedding));
         }
         grouped_entries
@@ -155,30 +155,28 @@ impl FileVectorDbManager {
         for (collection, id) in zip {
             grouped_ids
                 .entry(collection.clone()) // Use the collection field as the key
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(id);
         }
         grouped_ids
     }
 
-    pub async fn ensure_collection_exists(
-        &self,
-        name: &str
-    ) -> Result<(), QdrantError> {
+    pub async fn ensure_collection_exists(&self, name: &str) -> Result<(), QdrantError> {
         let name_str = name.to_string();
-        let mut contains = false;
-        {
-            contains = self.known_collections.read().await.contains(&name_str);
-        }
-        if !contains {
+
+        if !self.known_collections.read().await.contains(&name_str) {
+            // Only refresh and create if the collection is not known
             self.refresh_known_collections().await;
-            self.qdrant.create_collection(name, self.generator.embedding_dim_len).await?;
+            self.qdrant
+                .create_collection(name, self.generator.embedding_dim_len)
+                .await?;
             println!("Created collection: {}", name);
         }
+
         Ok(())
     }
 
-    pub async fn list_collections(&self)->Vec<String>{
+    pub async fn list_collections(&self) -> Vec<String> {
         self.qdrant.list_collections().await
     }
 
