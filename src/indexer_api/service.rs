@@ -1,5 +1,6 @@
+pub use super::infrastructure::indexer::Indexer;
 use super::{
-    infrastructure::{db_manager::FileVectorDbManager, index_worker, indexer::Indexer},
+    infrastructure::{db_manager::FileVectorDbManager, index_worker},
     models::search_query_models::VectorQueryModel,
     traits::indexable::{Indexable, IntoPayload},
     util::hashing::string_to_u64,
