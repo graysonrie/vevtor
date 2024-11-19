@@ -19,7 +19,7 @@ pub async fn index_worker<T>(
             dispatch_queue(db_manager_clone, &mut queue).await;
         }
     }
-    println!("closed");
+    println!("vector index worker receiving channel has been closed");
     if !queue.is_empty() {
         dispatch_queue(db_manager, &mut queue).await;
     }
@@ -29,10 +29,10 @@ async fn dispatch_queue<T>(db_manager: Arc<FileVectorDbManager>, queue: &mut Vec
 where
     T: Indexable + IntoPayload,
 {
-    println!("dispatching queue");
+    // println!("dispatching vector queue");
     let mut dispatch: Vec<T> = Vec::new();
     dispatch.append(queue);
     if let Err(err) = db_manager.insert_many(dispatch).await {
-        println!("Error inserting files: {}", err);
+        println!("Error inserting files into vector db: {}", err);
     }
 }
