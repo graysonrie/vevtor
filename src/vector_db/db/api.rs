@@ -1,6 +1,5 @@
 use qdrant_client::qdrant::{
-    CollectionOperationResponse, CreateCollectionBuilder, Distance, ScalarQuantizationBuilder,
-    VectorParamsBuilder,
+    CollectionOperationResponse, CreateCollectionBuilder, Distance, HealthCheckReply, ScalarQuantizationBuilder, VectorParamsBuilder
 };
 use qdrant_client::{Qdrant, QdrantError};
 
@@ -62,5 +61,9 @@ impl QdrantApi {
             .flat_map(|collection| collection.collections.into_iter())
             .map(|response| response.name)
             .collect()
+    }
+
+    pub async fn health_check(&self)->Result<HealthCheckReply,QdrantError>{
+        self.client.health_check().await
     }
 }

@@ -1,6 +1,6 @@
 use std::{collections::HashMap, iter::zip};
 
-use qdrant_client::{Payload, QdrantError};
+use qdrant_client::{qdrant::HealthCheckReply, Payload, QdrantError};
 use tokio::sync::RwLock;
 
 use crate::{
@@ -178,6 +178,10 @@ impl FileVectorDbManager {
 
     pub async fn list_collections(&self) -> Vec<String> {
         self.qdrant.list_collections().await
+    }
+
+    pub async fn health_check(&self)->Result<HealthCheckReply,QdrantError>{
+        self.qdrant.health_check().await
     }
 
     async fn refresh_known_collections(&self) {

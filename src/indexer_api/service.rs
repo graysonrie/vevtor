@@ -1,3 +1,5 @@
+use qdrant_client::qdrant::HealthCheckReply;
+
 pub use super::infrastructure::indexer::Indexer;
 use super::{
     infrastructure::{db_manager::FileVectorDbManager, index_worker},
@@ -72,5 +74,12 @@ impl VevtorService {
             index_worker::index_worker(db_manager_clone, batch_size, receiver).await;
         });
         Indexer::new(sender)
+    }
+
+    pub async fn health_check(&self) -> Result<HealthCheckReply, String> {
+        self.db_manager
+            .health_check()
+            .await
+            .map_err(|err| err.to_string())
     }
 }
