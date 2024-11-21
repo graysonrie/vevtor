@@ -76,6 +76,9 @@ impl VevtorService {
         Indexer::new(sender)
     }
 
+    /**
+    Good way to check to see if the Qdrant server is up and running
+    */
     pub async fn health_check(&self) -> Result<HealthCheckReply, String> {
         self.db_manager
             .health_check()
