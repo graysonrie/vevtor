@@ -1,5 +1,5 @@
 [package]
-name = "your-crate-name"
+name = "vevtor"
 version = "0.1.0"
 authors = ["Grayson Rieger graysonr12@icloud.com"]
 edition = "2021"
