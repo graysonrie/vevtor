@@ -1111,6 +1111,8 @@ checksum = "d0263a3d970d5c054ed9312c0057b4f3bde9c0b33836d3637361d4a9e6e7a408"
 [[package]]
 name = "indexable_macro"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4f755a06d1a2a1d5447d6a4d180a4c88b8f3b2f3196011afa704a0d37b15922c"
 dependencies = [
  "proc-macro2",
  "qdrant-client",
