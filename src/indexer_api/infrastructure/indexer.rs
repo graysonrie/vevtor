@@ -2,6 +2,7 @@ use tokio::sync::mpsc::Sender;
 
 use crate::{indexer_api::traits::indexable::IntoPayload, Indexable};
 
+#[derive(Clone)]
 pub struct Indexer<T>
 where
     T: Indexable + IntoPayload,
